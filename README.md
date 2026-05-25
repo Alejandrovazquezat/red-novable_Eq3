@@ -83,7 +83,7 @@ Diseñar e implementar una plataforma web que permita la creación, gestión y m
 
 | Capa          | Tecnologías |
 |---------------|-------------|
-| Frontend      | HTML5, CSS3 (neubrutalismo), JavaScript (ES6), AJAX, FontAwesome |
+| Frontend      | HTML5, CSS3, JavaScript|
 | Backend       | PHP 8.0 (POO, PDO, sesiones) |
 | Base de Datos | MySQL |
 | Autenticación | Google OAuth 2.0 (API cliente de Google) |
@@ -137,7 +137,7 @@ Diseñar e implementar una plataforma web que permita la creación, gestión y m
 
 2. Mover la carpeta a htdocs de XAMPP
    ```bash
-   C:\xampp\htdocs\Eq3_PI_web_ODS7
+   C:\xampp\htdocs\nombre_de_la_carpeta
    ```
 
 3. Instalar dependencias de Composer (desde la raíz del proyecto)
