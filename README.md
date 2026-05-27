@@ -91,26 +91,29 @@ Diseñar e implementar una plataforma web que permita la creación, gestión y m
 | Herramientas  | Git, GitHub, Composer (para la librería de Google Client) |
 
 ## Estructura del Proyecto (Actualizada)
--Eq3_PI_web_ODS7/
--├── assets/ # Archivos subidos (imágenes de publicaciones/perfil)
--│ └── uploads/
--├── backend/
--│ ├── controllers/ # Controladores (Auth, Publicacion, Categorias, Comentario, Like, Usuario)
--│ └── models/ # Modelos (Usuario, Publicacion, Categorias, Comentario, Like)
--├── config/ # Configuración (conexión DB, google_config.php)
--├── database/ # Script SQL (schema.sql)
--├── frontend/
--│ ├── admin/ # Panel de administración (dashboard, usuarios, comentarios, revisar, gestionar_contenido, sidebar)
--│ ├── ajax/ # Endpoints AJAX (guardar_comentario.php, toggle_like.php)
--│ ├── css/ # Estilos globales (navbar, index, categorías, perfil, mascota, etc.)
--│ ├── css_dash/ # Estilos del panel admin
--│ ├── image/ # Logos, ilustraciones y sprites de la mascota Franxx
--│ ├── js/ # Scripts del lado del cliente (comentarios.js, like-logic.js, mascota.js, franxx-sidebar.js, usuarios.js)
--│ └── pages/ # Vistas públicas (index, navbar, footer, inicioSesion, registro, categorias, categoria, perfil, logout, google_callback)
--├── .gitignore
--├── composer.json # Dependencias PHP (Google Client)
--├── composer.lock
--└── README.md
+
+```text
+Eq3_PI_web_ODS7/
+├── assets/                    # Archivos subidos (imágenes de publicaciones/perfil)
+│   └── uploads/
+├── backend/
+│   ├── controllers/           # Controladores (Auth, Publicacion, Categorias, Comentario, Like, Usuario)
+│   └── models/                # Modelos (Usuario, Publicacion, Categorias, Comentario, Like)
+├── config/                    # Configuración (conexión DB, google_config.php)
+├── database/                  # Script SQL (schema.sql)
+├── frontend/
+│   ├── admin/                 # Panel de administración (dashboard, usuarios, comentarios, revisar, gestionar_contenido, sidebar)
+│   ├── ajax/                  # Endpoints AJAX (guardar_comentario.php, toggle_like.php)
+│   ├── css/                   # Estilos globales (navbar, index, categorías, perfil, mascota, etc.)
+│   ├── css_dash/              # Estilos del panel admin
+│   ├── image/                 # Logos, ilustraciones y sprites de la mascota Franxx
+│   ├── js/                    # Scripts del lado del cliente (comentarios.js, like-logic.js, mascota.js, franxx-sidebar.js, usuarios.js)
+│   └── pages/                 # Vistas públicas (index, navbar, footer, inicioSesion, registro, categorias, categoria, perfil, logout, google_callback)
+├── .gitignore
+├── composer.json              # Dependencias PHP (Google Client)
+├── composer.lock
+└── README.md
+```
 
 ## Roles del Sistema
 
@@ -184,7 +187,7 @@ Diseñar e implementar una plataforma web que permita la creación, gestión y m
 
 
 ## Estado del Proyecto
-En desarrollo activo.
+Finalizado, prototipo final completamente funcional
 
 
 ## Equipo de Desarrollo - Equipo 3
