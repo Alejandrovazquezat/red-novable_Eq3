@@ -14,9 +14,39 @@ require_once __DIR__ . '/../../backend/controllers/PublicacionController.php';
 require_once __DIR__ . '/../../backend/controllers/CategoriesController.php'; 
 
 $db = (new Conexion())->getConexion();
-$usuario_id = $_SESSION['usuario_id'];
+$usuario_logueado_id = $_SESSION['usuario_id'];
+
+// ARQUITECTURA DE PERFIL PÚBLICO/PRIVADO 
+// Si viene un id por GET, estamos viendo el perfil de alguien más. Si no, el nuestro.
+$usuario_id = isset($_GET['id']) ? intval($_GET['id']) : $usuario_logueado_id;
+$es_mi_perfil = ($usuario_id === $usuario_logueado_id);
+
 $mensaje_perfil = "";
 $error_perfil = "";
+
+// ==========================================
+// PROCESAR PETICIÓN DE CAMBIO DE ROL
+// ==========================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] == 'solicitar_rol') {
+    $rol_solicitado = intval($_POST['rol_solicitado']);
+    $motivo = trim($_POST['motivo']);
+
+    // Verificar si ya tiene una petición pendiente
+    $stmtCheck = $db->prepare("SELECT id FROM peticiones_rol WHERE usuario_id = ? AND estado = 'pendiente'");
+    $stmtCheck->execute([$usuario_logueado_id]);
+    
+    if ($stmtCheck->fetch()) {
+        $error_perfil = "Ya cuentas con una solicitud de rol en espera de revisión.";
+    } else {
+        $stmtIns = $db->prepare("INSERT INTO peticiones_rol (usuario_id, rol_solicitado_id, motivo) VALUES (?, ?, ?)");
+        if ($stmtIns->execute([$usuario_logueado_id, $rol_solicitado, $motivo])) {
+            header("Location: perfil.php?msg=peticion_enviada");
+            exit;
+        } else {
+            $error_perfil = "Ocurrió un error al registrar la solicitud.";
+        }
+    }
+}
 
 // ==========================================
 // SOLUCIÓN ERROR 1: CANCELAR Y LIMPIAR ESTADO
@@ -34,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
     $pass_actual = $_POST['password_actual'] ?? '';
     
     $stmtPass = $db->prepare("SELECT password FROM usuarios WHERE id = ?");
-    $stmtPass->execute([$usuario_id]);
+    $stmtPass->execute([$usuario_logueado_id]);
     $hash_guardado = $stmtPass->fetchColumn();
 
     if (password_verify($pass_actual, $hash_guardado)) {
@@ -55,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
     $nueva_pass = $_POST['password'] ?? '';
     
     $stmtActual = $db->prepare("SELECT foto_perfil FROM usuarios WHERE id = ?");
-    $stmtActual->execute([$usuario_id]);
+    $stmtActual->execute([$usuario_logueado_id]);
     $usuarioActual = $stmtActual->fetch(PDO::FETCH_ASSOC);
     $ruta_foto_final = $usuarioActual['foto_perfil'];
 
@@ -83,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
                 $error_perfil = "Por favor, ingresa un correo electrónico válido.";
             } else {
                 $stmtCheckEmail = $db->prepare("SELECT id FROM usuarios WHERE email = ? AND id != ?");
-                $stmtCheckEmail->execute([$nuevo_email, $usuario_id]);
+                $stmtCheckEmail->execute([$nuevo_email, $usuario_logueado_id]);
                 if ($stmtCheckEmail->fetch()) {
                     $error_perfil = "El correo electrónico ya está registrado por otra cuenta.";
                 }
@@ -105,16 +135,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
             $db->beginTransaction();
             try {
                 $stmtBase = $db->prepare("UPDATE usuarios SET nombre = ?, foto_perfil = ?, descripcion = ? WHERE id = ?");
-                $stmtBase->execute([$nuevo_nombre, $ruta_foto_final, $nueva_descripcion, $usuario_id]);
+                $stmtBase->execute([$nuevo_nombre, $ruta_foto_final, $nueva_descripcion, $usuario_logueado_id]);
 
                 if (isset($_SESSION['edicion_desbloqueada'])) {
                     $stmtUpEmail = $db->prepare("UPDATE usuarios SET email = ? WHERE id = ?");
-                    $stmtUpEmail->execute([$nuevo_email, $usuario_id]);
+                    $stmtUpEmail->execute([$nuevo_email, $usuario_logueado_id]);
 
                     if (!empty($nueva_pass)) {
                         $pass_hash = password_hash($nueva_pass, PASSWORD_DEFAULT);
                         $stmtUpPass = $db->prepare("UPDATE usuarios SET password = ? WHERE id = ?");
-                        $stmtUpPass->execute([$pass_hash, $usuario_id]);
+                        $stmtUpPass->execute([$pass_hash, $usuario_logueado_id]);
                     }
                 }
 
@@ -142,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
     $categoria_id = intval($_POST['categoria']);
     $imagen_archivo = (isset($_FILES['imagen']) && $_FILES['imagen']['error'] == 0) ? $_FILES['imagen'] : null;
     
-    $pubController->editar($id_editar, $titulo, $contenido, $categoria_id, $usuario_id, $imagen_archivo);
+    $pubController->editar($id_editar, $titulo, $contenido, $categoria_id, $usuario_logueado_id, $imagen_archivo);
     
     $stmtReenviar = $db->prepare("UPDATE publicaciones SET estado = 'pendiente', observacion = NULL WHERE id = ?");
     $stmtReenviar->execute([$id_editar]);
@@ -158,20 +188,27 @@ $categorias = is_object($categorias_stmt) ? $categorias_stmt->fetchAll(PDO::FETC
 if (isset($_GET['eliminar_com'])) {
     $id_com = intval($_GET['eliminar_com']);
     $stmtDel = $db->prepare("DELETE FROM comentarios WHERE id = ? AND usuario_id = ?");
-    $stmtDel->execute([$id_com, $usuario_id]);
+    $stmtDel->execute([$id_com, $usuario_logueado_id]);
     header("Location: perfil.php");
     exit;
 }
 
-$stmtUser = $db->prepare("SELECT u.rol_id, u.nombre, u.email, u.fecha_creacion, u.foto_perfil, u.descripcion, r.nombre as rol_nombre FROM usuarios u JOIN roles r ON u.rol_id = r.id WHERE u.id = ?");
+// Cargar la información del perfil correspondiente (Mío o de Terceros)
+$stmtUser = $db->prepare("SELECT u.id, u.rol_id, u.nombre, u.email, u.fecha_creacion, u.foto_perfil, u.descripcion, r.nombre as rol_nombre FROM usuarios u JOIN roles r ON u.rol_id = r.id WHERE u.id = ?");
 $stmtUser->execute([$usuario_id]);
 $userData = $stmtUser->fetch(PDO::FETCH_ASSOC);
 
 if (!$userData) {
-    session_destroy(); header("Location: index.php"); exit;
+    header("Location: index.php"); 
+    exit;
 }
 
-$queryMisPubs = "SELECT p.id, p.titulo, p.fecha_creacion, p.estado, p.imagen, p.contenido, c.nombre as categoria_nombre, p.categoria_id, (SELECT COUNT(*) FROM likes l WHERE l.publicacion_id = p.id) as total_likes, (SELECT COUNT(*) FROM comentarios com WHERE com.publicacion_id = p.id) as total_comentarios FROM publicaciones p LEFT JOIN categorias c ON p.categoria_id = c.id WHERE p.usuario_id = ? AND p.estado != 'rechazado' ORDER BY p.fecha_creacion DESC";
+// Cargar publicaciones del usuario del perfil
+$queryMisPubs = "SELECT p.id, p.titulo, p.fecha_creacion, p.estado, p.imagen, p.contenido, c.nombre as categoria_nombre, p.categoria_id, (SELECT COUNT(*) FROM likes l WHERE l.publicacion_id = p.id) as total_likes, (SELECT COUNT(*) FROM comentarios com WHERE com.publicacion_id = p.id) as total_comentarios FROM publicaciones p LEFT JOIN categorias c ON p.categoria_id = c.id WHERE p.usuario_id = ? AND p.estado = 'publicado' ORDER BY p.fecha_creacion DESC";
+// Si es mi propio perfil, permito ver las mías que estén en revisión/pendientes
+if ($es_mi_perfil) {
+    $queryMisPubs = "SELECT p.id, p.titulo, p.fecha_creacion, p.estado, p.imagen, p.contenido, c.nombre as categoria_nombre, p.categoria_id, (SELECT COUNT(*) FROM likes l WHERE l.publicacion_id = p.id) as total_likes, (SELECT COUNT(*) FROM comentarios com WHERE com.publicacion_id = p.id) as total_comentarios FROM publicaciones p LEFT JOIN categorias c ON p.categoria_id = c.id WHERE p.usuario_id = ? AND p.estado != 'rechazado' ORDER BY p.fecha_creacion DESC";
+}
 $stmtMisPubs = $db->prepare($queryMisPubs);
 $stmtMisPubs->execute([$usuario_id]);
 $misPublicaciones = $stmtMisPubs->fetchAll(PDO::FETCH_ASSOC);
@@ -187,12 +224,33 @@ $stmtLikes->execute([$usuario_id]);
 $misLikes = $stmtLikes->fetchAll(PDO::FETCH_ASSOC);
 
 $likeModel = new Like($db);
-$likedPorUsuario = $likeModel->obtenerIdsPublicacionesLikedPorUsuario($usuario_id);
+$likedPorUsuario = $likeModel->obtenerIdsPublicacionesLikedPorUsuario($usuario_logueado_id);
 
 $queryComentarios = "SELECT c.*, p.titulo as pub_titulo FROM comentarios c JOIN publicaciones p ON c.publicacion_id = p.id WHERE c.usuario_id = ? ORDER BY c.fecha_creacion DESC";
 $stmtComentarios = $db->prepare($queryComentarios);
 $stmtComentarios->execute([$usuario_id]);
 $misComentarios = $stmtComentarios->fetchAll(PDO::FETCH_ASSOC);
+
+// Verificar estado de peticiones de rol si es mi perfil
+$peticionPendiente = false;
+$rol_actual = intval($userData['rol_id']);
+
+if ($es_mi_perfil) {
+    $stmtPet = $db->prepare("SELECT estado FROM peticiones_rol WHERE usuario_id = ? ORDER BY fecha_creacion DESC LIMIT 1");
+    $stmtPet->execute([$usuario_logueado_id]);
+    $resPet = $stmtPet->fetch(PDO::FETCH_ASSOC);
+    if ($resPet && $resPet['estado'] == 'pendiente') {
+        $peticionPendiente = true;
+    }
+}
+
+// Definir el mensaje dinámico según el rol
+$mensaje_solicitud = "¿Deseas redactar artículos o moderar el contenido del portal?";
+if ($rol_actual === 3) {
+    $mensaje_solicitud = "¿Deseas un cambio de rol a editor para moderar el contenido?";
+} elseif ($rol_actual === 2) {
+    $mensaje_solicitud = "¿Deseas colaborar en la administración técnica de la plataforma?";
+}
 ?>
 
 <!DOCTYPE html>
@@ -200,7 +258,7 @@ $misComentarios = $stmtComentarios->fetchAll(PDO::FETCH_ASSOC);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Perfil - Red-novable</title>
+    <title><?= htmlspecialchars($userData['nombre']) ?> - Red-novable</title>
     <link rel="stylesheet" href="../css/navbar-style.css"> 
     <link rel="stylesheet" href="../css/categoria-styles.css">
     <link rel="stylesheet" href="../css/perfil-styles.css">
@@ -237,38 +295,56 @@ $misComentarios = $stmtComentarios->fetchAll(PDO::FETCH_ASSOC);
                 <span class="user-rol"><?= htmlspecialchars($userData['rol_nombre']) ?></span>
                 
                 <p class="user-description">
-                    <?= $userData['descripcion'] ? nl2br(htmlspecialchars($userData['descripcion'])) : '<em>Sin descripción aún. ¡Cuéntanos sobre ti!</em>' ?>
+                    <?= $userData['descripcion'] ? nl2br(htmlspecialchars($userData['descripcion'])) : '<em>Sin descripción cargada en el sistema.</em>' ?>
                 </p>
 
-                <p class="user-joined"><i class="far fa-calendar-alt"></i> Se unió en <?= date('M Y', strtotime($userData['fecha_creacion'])) ?></p>
+                <p class="user-joined"><i class="far fa-calendar-alt"></i> Se unió al portal en <?= date('M Y', strtotime($userData['fecha_creacion'])) ?></p>
+                
+                <?php if($es_mi_perfil): ?>
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 20px;">
+                        <button class="btn-p-edit" onclick="abrirModalPerfil()" style="margin: 0;">
+                            <i class="fas fa-user-cog"></i> Configuración
+                        </button>
+                        
+                        <?php if($rol_actual != 1): ?>
+                            <?php if($peticionPendiente): ?>
+                                <button type="button" class="btn-glass-gray" disabled title="Solicitud en revisión" style="opacity: 0.7; cursor: not-allowed; margin: 0;">
+                                    <i class="fas fa-clock"></i> Solicitud en revisión
+                                </button>
+                            <?php else: ?>
+                                <button type="button" class="btn-glass-gray" onclick="document.getElementById('modal-solicitar-rol').classList.add('active')" style="margin: 0;">
+                                    <i class="fas fa-user-tag"></i> Solicitar Rol
+                                </button>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
             </div>
-
-            <button class="btn-p-edit btn-edit-full" onclick="abrirModalPerfil()">
-                <i class="fas fa-user-cog"></i> Configuración
-            </button>
         </div>
     </header>
 
     <main class="perfil-container">
         
         <div class="profile-nav">
-            <button class="tab-btn active" onclick="openTab(event, 'Posts')">Posts (<?= count($misPublicaciones) ?>)</button>
-            <button class="tab-btn" onclick="openTab(event, 'Likes')">Me gusta (<?= count($misLikes) ?>)</button>
-            <button class="tab-btn" onclick="openTab(event, 'Comentarios')">Comentarios (<?= count($misComentarios) ?>)</button>
-            
-            <?php if (strtolower($userData['rol_nombre']) === 'autor' || count($misRechazados) > 0 || $userData['rol_id'] == 3): ?>
-                <button class="tab-btn" onclick="openTab(event, 'Rechazados')">Devueltos (<?= count($misRechazados) ?>)</button>
+            <button class="tab-btn active" onclick="openTab(event, 'Posts')">Artículos (<?= count($misPublicaciones) ?>)</button>
+            <?php if($es_mi_perfil): ?>
+                <button class="tab-btn" onclick="openTab(event, 'Likes')">Me gusta (<?= count($misLikes) ?>)</button>
+                <button class="tab-btn" onclick="openTab(event, 'Comentarios')">Comentarios (<?= count($misComentarios) ?>)</button>
+                
+                <?php if (strtolower($userData['rol_nombre']) === 'autor' || count($misRechazados) > 0 || $userData['rol_id'] == 3): ?>
+                    <button class="tab-btn" onclick="openTab(event, 'Rechazados')">Devueltos (<?= count($misRechazados) ?>)</button>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
 
         <?php if(isset($_GET['msg']) && $_GET['msg'] == 'perfil_actualizado'): ?>
             <div style="background: #dcfce7; color: #166534; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; position: relative; z-index: 5;">
-                <i class="fas fa-check-circle"></i> Tu perfil ha sido actualizado correctamente.
+                <i class="fas fa-check-circle"></i> La cuenta ha sido actualizada de forma correcta.
             </div>
         <?php endif; ?>
-        <?php if(isset($_GET['msg']) && $_GET['msg'] == 'editado'): ?>
+        <?php if(isset($_GET['msg']) && $_GET['msg'] == 'peticion_enviada'): ?>
             <div style="background: #dbeafe; color: #1e40af; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; position: relative; z-index: 5;">
-                <i class="fas fa-check-circle"></i> Tu publicación ha sido actualizada y enviada a revisión exitosamente.
+                <i class="fas fa-paper-plane"></i> Solicitud de cambio de rol registrada. Pendiente de evaluación de administración.
             </div>
         <?php endif; ?>
 
@@ -290,9 +366,11 @@ $misComentarios = $stmtComentarios->fetchAll(PDO::FETCH_ASSOC);
                                 <div class="vertical-contenido">
                                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
                                         <span class="vertical-categoria"><?= htmlspecialchars($pub['categoria_nombre'] ?? 'General') ?></span>
-                                        <button onclick="abrirModalEditarPost(<?= $pub['id'] ?>)" class="btn-p-edit" style="padding: 0.5em 1em; font-size: 0.8rem;">
-                                            <i class="fas fa-pencil-alt"></i> Editar
-                                        </button>
+                                        <?php if($es_mi_perfil): ?>
+                                            <button onclick="abrirModalEditarPost(<?= $pub['id'] ?>)" class="btn-p-edit" style="padding: 0.5em 1em; font-size: 0.8rem;">
+                                                <i class="fas fa-pencil-alt"></i> Editar
+                                            </button>
+                                        <?php endif; ?>
                                     </div>
 
                                     <div id="data-titulo-<?= $pub['id'] ?>" style="display:none;"><?= htmlspecialchars($pub['titulo']) ?></div>
@@ -305,7 +383,7 @@ $misComentarios = $stmtComentarios->fetchAll(PDO::FETCH_ASSOC);
                                     
                                     <div class="vertical-meta">
                                         <i class="fas fa-calendar"></i> <?= date('d/m/Y', strtotime($pub['fecha_creacion'])) ?>
-                                        <?php if($pub['estado'] == 'pendiente'): ?>
+                                        <?php if($es_mi_perfil && $pub['estado'] == 'pendiente'): ?>
                                             <span style="background: rgba(245, 158, 11, 0.15); color: #d97706; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; margin-left:10px; font-weight: 700;">
                                                 <i class="fas fa-clock"></i> En revisión
                                             </span>
@@ -315,161 +393,183 @@ $misComentarios = $stmtComentarios->fetchAll(PDO::FETCH_ASSOC);
                                     <p class="vertical-resumen">
                                         <?= htmlspecialchars(mb_substr(strip_tags(html_entity_decode($pub['contenido'])), 0, 200)) ?>...
                                     </p>
-
-                                    <div class="post-actions" style="margin-top: 15px;">
-                                        <button class="like-btn <?= $yaLiked ? 'liked' : '' ?>" data-pubid="<?= $pub['id'] ?>">
-                                            <svg class="like-icon" viewBox="0 0 24 24" width="24" height="24">
-                                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                                            </svg>
-                                            <span class="like-text">Me gusta</span>
-                                            <span class="like-count"><?= $likesCount ?></span>
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
                         </div>
                     <?php endforeach; ?>
                 <?php else: ?>
-                    <div class="no-pubs vertical-card-wrapper" style="padding: 40px; background: rgba(255,255,255,0.4);">
-                        <i class="fas fa-folder-open"></i>
-                        <h3>No has publicado nada aún.</h3>
+                    <div class="no-pubs vertical-card-wrapper" style="padding: 50px; background: rgba(255,255,255,0.4); text-align: center;">
+                        <i class="fas fa-folder-open" style="font-size: 3rem; margin-bottom: 15px; display: block; opacity: 0.5;"></i>
+                        <h3 style="margin-bottom: 10px;">No se registran artículos compartidos.</h3>
+                        
+                        <?php if($es_mi_perfil && $rol_actual != 1): ?>
+                            <?php if($peticionPendiente): ?>
+                                <p style="color: #d97706; font-weight: 600; margin-top: 15px;"><i class="fas fa-clock"></i> Cuentas con una solicitud de colaboración en proceso de evaluación.</p>
+                            <?php else: ?>
+                                <p style="color: var(--texto-oscuro); margin-bottom: 20px; margin-top: 15px; font-weight: 500;"><?= $mensaje_solicitud ?></p>
+                                <button type="button" class="btn-glass-gray" onclick="document.getElementById('modal-solicitar-rol').classList.add('active')" style="margin: 0 auto;">
+                                    <i class="fas fa-user-plus"></i> Solicitar cambio de rol
+                                </button>
+                            <?php endif; ?>
+                        <?php endif; ?>
                     </div>
                 <?php endif; ?>
             </div>
         </div>
 
-        <div id="Likes" class="tab-content" style="position: relative; z-index: 5;">
-            <div class="lista-vertical">
-                <?php if (count($misLikes) > 0): ?>
-                    <?php foreach($misLikes as $pub): 
-                        $likesCount = $likeModel->contarLikes($pub['id']);
-                    ?>
-                        <div class="vertical-card-wrapper" onclick="if(!event.target.closest('button') && !event.target.closest('a')) window.location.href='publicacion.php?id=<?= $pub['id'] ?>'">
-                            <div class="vertical-card-inner">
-                                <?php if($pub['imagen']): ?>
-                                    <div class="vertical-imagen">
-                                        <img src="../../assets/<?= htmlspecialchars($pub['imagen']) ?>" alt="Imagen de publicación">
-                                    </div>
-                                <?php endif; ?>
-                                
-                                <div class="vertical-contenido">
-                                    <span class="vertical-categoria"><?= htmlspecialchars($pub['categoria_nombre'] ?? 'General') ?></span>
+        <?php if($es_mi_perfil): ?>
+            <div id="Likes" class="tab-content" style="position: relative; z-index: 5;">
+                <div class="lista-vertical">
+                    <?php if (count($misLikes) > 0): ?>
+                        <?php foreach($misLikes as $pub): ?>
+                            <div class="vertical-card-wrapper" onclick="window.location.href='publicacion.php?id=<?= $pub['id'] ?>'">
+                                <div class="vertical-card-inner">
+                                    <?php if($pub['imagen']): ?>
+                                        <div class="vertical-imagen">
+                                            <img src="../../assets/<?= htmlspecialchars($pub['imagen']) ?>" alt="Imagen de publicación">
+                                        </div>
+                                    <?php endif; ?>
                                     
-                                    <h2 class="vertical-titulo">
-                                        <?= htmlspecialchars($pub['titulo']) ?>
-                                    </h2>
-                                    
-                                    <div class="vertical-meta">
-                                        <i class="fas fa-user"></i> <?= htmlspecialchars($pub['autor'] ?? 'Desconocido') ?> &nbsp;|&nbsp; 
-                                        <i class="fas fa-calendar"></i> <?= date('d/m/Y', strtotime($pub['fecha_creacion'])) ?>
-                                    </div>
-                                    
-                                    <p class="vertical-resumen">
-                                        <?= htmlspecialchars(mb_substr(strip_tags(html_entity_decode($pub['contenido'])), 0, 200)) ?>...
-                                    </p>
-
-                                    <div class="post-actions" style="margin-top: 15px;">
-                                        <button class="like-btn liked" data-pubid="<?= $pub['id'] ?>">
-                                            <svg class="like-icon" viewBox="0 0 24 24" width="24" height="24">
-                                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                                            </svg>
-                                            <span class="like-text">Me gusta</span>
-                                            <span class="like-count"><?= $likesCount ?></span>
-                                        </button>
+                                    <div class="vertical-contenido">
+                                        <span class="vertical-categoria"><?= htmlspecialchars($pub['categoria_nombre'] ?? 'General') ?></span>
+                                        <h2 class="vertical-titulo"><?= htmlspecialchars($pub['titulo']) ?></h2>
+                                        <div class="vertical-meta">
+                                            <i class="fas fa-user"></i> <?= htmlspecialchars($pub['autor'] ?? 'Desconocido') ?> &nbsp;|&nbsp; 
+                                            <i class="fas fa-calendar"></i> <?= date('d/m/Y', strtotime($pub['fecha_creacion'])) ?>
+                                        </div>
+                                        <p class="vertical-resumen">
+                                            <?= htmlspecialchars(mb_substr(strip_tags(html_entity_decode($pub['contenido'])), 0, 200)) ?>...
+                                        </p>
                                     </div>
                                 </div>
                             </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <div class="no-pubs vertical-card-wrapper" style="padding: 40px; background: rgba(255,255,255,0.4);">
+                            <i class="fas fa-heart-broken"></i>
+                            <h3>No se registran marcas de 'Me gusta'.</h3>
                         </div>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <div class="no-pubs vertical-card-wrapper" style="padding: 40px; background: rgba(255,255,255,0.4);">
-                        <i class="fas fa-heart-broken"></i>
-                        <h3>Aún no has dado 'Me gusta' a ninguna publicación.</h3>
-                    </div>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <div id="Comentarios" class="tab-content" style="position: relative; z-index: 5;">
-            <?php if (count($misComentarios) > 0): ?>
-                <?php foreach($misComentarios as $com): ?>
-                    <div class="mi-comentario-item vertical-card-wrapper" style="margin-bottom: 20px; padding: 0;" onclick="if(!event.target.closest('button') && !event.target.closest('a')) window.location.href='publicacion.php?id=<?= $com['publicacion_id'] ?>'">
-                        <div style="padding: 25px;">
-                            <div class="comentario-header">
-                                <div class="comentario-meta">
-                                    Comentaste en: <strong><?= htmlspecialchars($com['pub_titulo']) ?></strong> 
-                                    <br><small><?= date('d M Y, H:i', strtotime($com['fecha_creacion'])) ?></small>
-                                </div>
-                                <a href="perfil.php?eliminar_com=<?= $com['id'] ?>" class="btn-delete-com" onclick="return confirm('¿Seguro que deseas eliminar este comentario?');">
-                                    <i class="fas fa-trash-alt"></i> Eliminar
-                                </a>
-                            </div>
-                            <div class="comentario-texto">
-                                "<?= nl2br(htmlspecialchars($com['contenido'])) ?>"
-                            </div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <div class="no-pubs vertical-card-wrapper" style="padding: 40px; background: rgba(255,255,255,0.4);">
-                    <i class="fas fa-comment-slash"></i>
-                    <h3>No has escrito ningún comentario.</h3>
+                    <?php endif; ?>
                 </div>
-            <?php endif; ?>
-        </div>
+            </div>
 
-        <div id="Rechazados" class="tab-content" style="position: relative; z-index: 5;">
-            <div class="lista-vertical">
-                <?php if (count($misRechazados) > 0): ?>
-                    <?php foreach($misRechazados as $pub): ?>
-                        <div class="vertical-card-wrapper publicacion-rechazada" data-pub-id="<?= $pub['id'] ?>" onclick="if(!event.target.closest('button') && !event.target.closest('a')) window.location.href='publicacion.php?id=<?= $pub['id'] ?>'">
-                            <div class="vertical-card-inner">
-                                <?php if($pub['imagen']): ?>
-                                    <div class="vertical-imagen" style="opacity: 0.8;">
-                                        <img src="../../assets/<?= htmlspecialchars($pub['imagen']) ?>" alt="Imagen">
+            <div id="Comentarios" class="tab-content" style="position: relative; z-index: 5;">
+                <?php if (count($misComentarios) > 0): ?>
+                    <?php foreach($misComentarios as $com): ?>
+                        <div class="mi-comentario-item vertical-card-wrapper" style="margin-bottom: 20px; padding: 0;" onclick="if(!event.target.closest('a') && !event.target.closest('button')) window.location.href='publicacion.php?id=<?= $com['publicacion_id'] ?>'">
+                            <div style="padding: 25px;">
+                                <div class="comentario-header">
+                                    <div class="comentario-meta">
+                                        Aporte en: <strong><?= htmlspecialchars($com['pub_titulo']) ?></strong> 
+                                        <br><small><?= date('d M Y, H:i', strtotime($com['fecha_creacion'])) ?></small>
                                     </div>
-                                <?php endif; ?>
-                                
-                                <div class="vertical-contenido">
-                                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
-                                        <span class="vertical-categoria" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;"><?= htmlspecialchars($pub['categoria_nombre'] ?? 'General') ?></span>
-                                        <button onclick="abrirModalEditarPost(<?= $pub['id'] ?>)" class="btn-p-edit" style="padding: 0.5em 1em; font-size: 0.8rem; color: #ef4444; border-color: #ef4444;">
-                                            <i class="fas fa-pencil-alt"></i> Corregir
-                                        </button>
-                                    </div>
-
-                                    <h2 class="vertical-titulo" style="color: #64748b;">
-                                        <?= htmlspecialchars($pub['titulo']) ?>
-                                    </h2>
-                                    
-                                    <div class="publicacion-meta" style="margin-bottom: 15px; font-size: 0.8rem; color: var(--texto-secundario);">
-                                        <i class="fas fa-calendar"></i> <?= date('d/m/Y', strtotime($pub['fecha_creacion'])) ?>
-                                    </div>
-                                    
-                                    <div class="observacion-box">
-                                        <strong style="display:block; margin-bottom:5px;"><i class="fas fa-exclamation-circle"></i> Observación del Editor:</strong>
-                                        <?= nl2br(htmlspecialchars($pub['observacion'] ?? 'No hay observaciones adjuntas.')) ?>
-                                    </div>
-
-                                    <div id="data-titulo-<?= $pub['id'] ?>" style="display:none;"><?= htmlspecialchars($pub['titulo']) ?></div>
-                                    <div id="data-contenido-<?= $pub['id'] ?>" style="display:none;"><?= htmlspecialchars($pub['contenido']) ?></div>
-                                    <div id="data-cat-id-<?= $pub['id'] ?>" style="display:none;"><?= $pub['categoria_id'] ?></div>
+                                    <?php if($es_mi_perfil): ?>
+                                        <a href="perfil.php?eliminar_com=<?= $com['id'] ?>" class="btn-delete-com" onclick="return confirm('¿Confirmas la remoción de esta opinión?');">
+                                            <i class="fas fa-trash-alt"></i> Quitar
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="comentario-texto">
+                                    "<?= nl2br(htmlspecialchars($com['contenido'])) ?>"
                                 </div>
                             </div>
                         </div>
                     <?php endforeach; ?>
                 <?php else: ?>
                     <div class="no-pubs vertical-card-wrapper" style="padding: 40px; background: rgba(255,255,255,0.4);">
-                        <i class="fas fa-check-double" style="color: #10b981;"></i>
-                        <h3>¡Excelente! No tienes publicaciones devueltas en este momento.</h3>
+                        <i class="fas fa-comment-slash"></i>
+                        <h3>No se registran comentarios en el sistema.</h3>
                     </div>
                 <?php endif; ?>
             </div>
-        </div>
+
+            <div id="Rechazados" class="tab-content" style="position: relative; z-index: 5;">
+                <div class="lista-vertical">
+                    <?php if (count($misRechazados) > 0): ?>
+                        <?php foreach($misRechazados as $pub): ?>
+                            <div class="vertical-card-wrapper publicacion-rechazada" data-pub-id="<?= $pub['id'] ?>">
+                                <div class="vertical-card-inner">
+                                    <?php if($pub['imagen']): ?>
+                                        <div class="vertical-imagen" style="opacity: 0.8;">
+                                            <img src="../../assets/<?= htmlspecialchars($pub['imagen']) ?>" alt="Imagen">
+                                        </div>
+                                    <?php endif; ?>
+                                    
+                                    <div class="vertical-contenido">
+                                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                                            <span class="vertical-categoria" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;"><?= htmlspecialchars($pub['categoria_nombre'] ?? 'General') ?></span>
+                                            <button onclick="abrirModalEditarPost(<?= $pub['id'] ?>)" class="btn-p-edit" style="padding: 0.5em 1em; font-size: 0.8rem; color: #ef4444; border-color: #ef4444;">
+                                                <i class="fas fa-pencil-alt"></i> Corregir
+                                            </button>
+                                        </div>
+
+                                        <!-- ========================================== -->
+                                        <!-- DIVs OCULTOS NECESARIOS PARA EDITAR (CORRECCIÓN) -->
+                                        <!-- ========================================== -->
+                                        <div id="data-titulo-<?= $pub['id'] ?>" style="display:none;"><?= htmlspecialchars($pub['titulo']) ?></div>
+                                        <div id="data-contenido-<?= $pub['id'] ?>" style="display:none;"><?= htmlspecialchars($pub['contenido']) ?></div>
+                                        <div id="data-cat-id-<?= $pub['id'] ?>" style="display:none;"><?= $pub['categoria_id'] ?></div>
+
+                                        <h2 class="vertical-titulo" style="color: #64748b;"><?= htmlspecialchars($pub['titulo']) ?></h2>
+                                        <div class="publicacion-meta" style="margin-bottom: 15px; font-size: 0.8rem; color: var(--texto-secundario);">
+                                            <i class="fas fa-calendar"></i> <?= date('d/m/Y', strtotime($pub['fecha_creacion'])) ?>
+                                        </div>
+                                        
+                                        <div class="observacion-box">
+                                            <strong style="display:block; margin-bottom:5px;"><i class="fas fa-exclamation-circle"></i> Nota de moderación:</strong>
+                                            <?= nl2br(htmlspecialchars($pub['observacion'] ?? 'Ajustes requeridos no especificados.')) ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
 
     </main>
 
-    <?php include 'footer.php'; ?>
+    <div id="modal-solicitar-rol" class="modal-overlay">
+        <div class="modal-box modal-profile-wide" style="max-width: 600px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: var(--texto-titulos); font-weight: 800;">
+                    <i class="fas fa-user-tag" style="color: #3b82f6;"></i> Postular nuevo rol
+                </h2>
+                <button type="button" onclick="cerrarModal('modal-solicitar-rol')" style="background:none; border:none; font-size: 1.8rem; cursor:pointer; color: #94a3b8; line-height: 1;">&times;</button>
+            </div>
+            
+            <form action="perfil.php" method="POST">
+                <input type="hidden" name="accion" value="solicitar_rol">
+                
+                <div class="form-group">
+                    <label>Selecciona el perfil deseado:</label>
+                    <select name="rol_solicitado" class="input-expand-glass" required>
+                        <?php if ($rol_actual == 4 || $rol_actual > 3): ?>
+                            <option value="3">Autor (Redactar artículos sobre ODS 7)</option>
+                            <option value="2">Editor (Evaluar y gestionar contenido del portal)</option>
+                        <?php elseif ($rol_actual == 3): ?>
+                            <option value="2">Editor (Evaluar y gestionar contenido del portal)</option>
+                        <?php elseif ($rol_actual == 2): ?>
+                            <option value="1">Administrador (Gestión total de la plataforma)</option>
+                        <?php endif; ?>
+                    </select>
+                </div>
+                
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>Expón detalladamente tus motivos o justificación:</label>
+                    <textarea name="motivo" class="input-expand-glass" style="min-height: 120px; resize: vertical;" placeholder="Escribe aquí las razones por las que deseas cambiar de rol..." required></textarea>
+                </div>
+                
+                <div class="modal-buttons" style="margin-top: 25px;">
+                    <button type="button" class="btn-modal-cancel" onclick="cerrarModal('modal-solicitar-rol')">Cancelar</button>
+                    <button type="submit" class="btn-glass-gray">
+                        <i class="fas fa-paper-plane" style="color: #3b82f6;"></i> Enviar solicitud
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <div id="modal-perfil" class="modal-overlay <?= !empty($error_perfil) || isset($_SESSION['edicion_desbloqueada']) ? 'active' : '' ?>">
         <div class="modal-box modal-profile-wide">
@@ -682,7 +782,7 @@ $misComentarios = $stmtComentarios->fetchAll(PDO::FETCH_ASSOC);
             if(passInput) passInput.focus();
         }
 
-        // 🔥 QUILL.JS CONFIGURACIÓN PARA PERFIL 🔥
+        // QUILL.JS CONFIGURACIÓN PARA PERFIL 
         function imageHandlerPerfil() {
             const input = document.createElement('input');
             input.setAttribute('type', 'file');

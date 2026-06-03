@@ -17,6 +17,7 @@ $rol = $_SESSION['rol_id'] ?? 0;
             <a href="gestionar_categorias.php" class="nav-link <?= $current_page == 'gestionar_categorias.php' ? 'active' : '' ?>">🏷️ Gestión de Categorías</a>
             <a href="revisar.php" class="nav-link <?= $current_page == 'revisar.php' ? 'active' : '' ?>">✅ Pendientes de revisión</a>
             <a href="usuarios.php" class="nav-link <?= $current_page == 'usuarios.php' ? 'active' : '' ?>">👥 Usuarios</a>
+            <a href="peticiones_rol.php" class="nav-link <?= $current_page == 'peticiones_rol.php' ? 'active' : '' ?>">📈 Peticiones rol</a>
             <a href="comentarios.php" class="nav-link <?= $current_page == 'comentarios.php' ? 'active' : '' ?>">💬 Comentarios</a>
             
         <?php elseif ($rol == 2): /* == EDITOR == */ ?>

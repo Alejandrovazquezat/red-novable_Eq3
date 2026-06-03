@@ -28,9 +28,9 @@ if ($id <= 0) {
 }
 
 // ==========================
-// 4. Consultar Publicación en la BD
+// 4. Consultar Publicación en la BD (Modificado para traer foto e ID de autor)
 // ==========================
-$query = "SELECT p.*, u.nombre as autor_nombre, c.nombre as categoria_nombre, c.id as cat_id 
+$query = "SELECT p.*, u.id as autor_id, u.nombre as autor_nombre, u.foto_perfil as autor_foto, c.nombre as categoria_nombre, c.id as cat_id 
           FROM publicaciones p 
           LEFT JOIN usuarios u ON p.usuario_id = u.id 
           LEFT JOIN categorias c ON p.categoria_id = c.id 
@@ -101,13 +101,13 @@ if (!$pub) {
 
         .post-title { font-size: 3rem; color: var(--texto-titulos); margin: 0 0 20px 0; line-height: 1.2; font-weight: 900; word-break: break-word; }
         
-        .post-meta { color: #64748b; font-size: 1rem; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+        .post-meta { color: #64748b; font-size: 1rem; display: flex; justify-content: center; align-items: center; gap: 20px; flex-wrap: wrap; }
         body.dark-mode .post-meta { color: #9ca3af; }
 
         .post-image-container { width: 100%; border-radius: 20px; overflow: hidden; margin-bottom: 40px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .post-image-container img { width: 100%; max-height: 550px; object-fit: cover; display: block; }
 
-        /* 🔥 AJUSTES RESPONSIVOS PARA EL CONTENIDO HTML 🔥 */
+        /* AJUSTES RESPONSIVOS PARA EL CONTENIDO HTML  */
         .post-content {
             font-size: 1.15rem;
             color: var(--texto-titulos);
@@ -135,6 +135,31 @@ if (!$pub) {
 
         .interaction-bar { display: flex; align-items: center; gap: 15px; padding-top: 20px; border-top: 1px solid #e2e8f0; margin-bottom: 40px; flex-wrap: wrap; }
         body.dark-mode .interaction-bar { border-color: #30363d; }
+
+        /* =========================================
+           ESTILOS PARA FOTOS DE PERFIL (NUEVO)
+           ========================================= */
+        .avatar-mini {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            background-color: var(--fondo-suave);
+        }
+        body.dark-mode .avatar-mini { border-color: #30363d; }
+        
+        .author-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+            color: inherit;
+            transition: transform 0.2s, color 0.2s;
+            font-weight: 700;
+        }
+        .author-link:hover { transform: scale(1.03); color: #3b82f6; }
 
         /* =========================================
            BOTONES NEUMÓRFICOS UIVERSE (Sombras Grises)
@@ -222,7 +247,7 @@ if (!$pub) {
         body.dark-mode .comment-item { background: rgba(22, 27, 34, 0.58); border: 1px solid #30363d; color: #c9d1d9; box-shadow: 12px 17px 51px rgba(0, 0, 0, 0.4); }
         body.dark-mode .comment-item:hover { border: 1px solid var(--color-accion); }
 
-        .comment-user { font-weight: bold; color: #3b82f6; font-size: 0.9rem; margin-bottom: 8px; }
+        .comment-user { font-weight: bold; color: #3b82f6; font-size: 0.9rem; margin-bottom: 12px; }
         
         .form-control { position: relative; width: 100%; }
         .input { color: inherit; font-size: 1rem; background: transparent; width: 100%; padding: 12px; border: none; border-bottom: 2px solid #cbd5e1; transition: 0.3s; box-sizing: border-box; }
@@ -234,7 +259,7 @@ if (!$pub) {
         .comment-form-container { display: flex; gap: 15px; align-items: flex-end; }
 
         /* =========================================
-           🔥 MODAL DE SEGURIDAD (DISEÑO CRISTAL 3D GRIS) 🔥
+           MODAL DE SEGURIDAD (DISEÑO CRISTAL 3D GRIS) 
            ========================================= */
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -274,18 +299,18 @@ if (!$pub) {
 
         /* Botones de Modal Cristal */
         .btn-secondary {
-            background: rgba(255, 255, 255, 0.6); color: #000000; border: 1px solid rgba(0,0,0,0.05); padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; font-family: 'Inter', sans-serif; font-size: 0.95rem; width: 100%;
+            background: rgba(255, 255, 255, 0.6); color: #334155; border: 1px solid rgba(0,0,0,0.05); padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; font-family: 'Inter', sans-serif; font-size: 0.95rem; width: 100%;
         }
         .btn-secondary:hover { background: rgba(255, 255, 255, 0.9); color: #0f172a; transform: translateY(-2px); }
         body.dark-mode .btn-secondary { background: rgba(255,255,255,0.05); color: #cbd5e1; border-color: rgba(255,255,255,0.1); }
         
         .btn-primary-modal {
-            background: #000000; color: white; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.3s; font-family: 'Inter', sans-serif; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); width: 100%;
+            background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.3s; font-family: 'Inter', sans-serif; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); width: 100%;
         }
         .btn-primary-modal:hover { transform: translateY(-2px); filter: brightness(1.1); }
 
         .btn-close-modal {
-            background: transparent; color: #000000; border: none; font-size: 1rem; cursor: pointer; transition: 0.3s; padding: 10px; font-weight: 600; margin-top: 10px;
+            background: transparent; color: #94a3b8; border: none; font-size: 1rem; cursor: pointer; transition: 0.3s; padding: 10px; font-weight: 600; margin-top: 10px;
         }
         .btn-close-modal:hover { color: #ef4444; }
 
@@ -324,8 +349,18 @@ if (!$pub) {
             <header class="post-header">
                 <a href="categoria.php?id=<?= $pub['cat_id'] ?>" class="post-category"><?= htmlspecialchars($pub['categoria_nombre']) ?></a>
                 <h1 class="post-title"><?= htmlspecialchars($pub['titulo']) ?></h1>
+                
                 <div class="post-meta">
-                    <span><i class="fas fa-user-edit"></i> Escrito por <strong><?= htmlspecialchars($pub['autor_nombre'] ?? 'Anónimo') ?></strong></span>
+                    <span>
+                        <a href="perfil.php?id=<?= $pub['autor_id'] ?? $pub['usuario_id'] ?>" class="author-link">
+                            <?php if (!empty($pub['autor_foto'])): ?>
+                                <img src="../../assets/<?= htmlspecialchars($pub['autor_foto']) ?>" class="avatar-mini" alt="Foto">
+                            <?php else: ?>
+                                <i class="fas fa-user-circle" style="font-size: 1.5rem; color: #94a3b8;"></i>
+                            <?php endif; ?>
+                            Escrito por <strong><?= htmlspecialchars($pub['autor_nombre'] ?? 'Anónimo') ?></strong>
+                        </a>
+                    </span>
                     <span><i class="fas fa-calendar-alt"></i> <?= date('d M, Y', strtotime($pub['fecha_creacion'])) ?></span>
                 </div>
             </header>
@@ -359,12 +394,25 @@ if (!$pub) {
                 
                 <div class="comments-list" id="comments-list-<?= $pub['id'] ?>">
                     <?php 
-                    $comentarios_pub = $comentarioController->obtenerComentariosPorPublicacion($pub['id']);
+                    // Ejecutamos la consulta manual para garantizar traer ID y Foto para los comentarios
+                    $stmtComs = $db->prepare("SELECT c.*, u.nombre as autor_nombre, u.foto_perfil, u.id as usuario_id FROM comentarios c LEFT JOIN usuarios u ON c.usuario_id = u.id WHERE c.publicacion_id = ? ORDER BY c.fecha_creacion ASC");
+                    $stmtComs->execute([$pub['id']]);
+                    $comentarios_pub = $stmtComs->fetchAll(PDO::FETCH_ASSOC);
+
                     if (count($comentarios_pub) > 0): 
                         foreach($comentarios_pub as $comentario): 
                     ?>
                         <div class="comment-item">
-                            <div class="comment-user"><i class="fas fa-user-circle"></i> <?= htmlspecialchars($comentario['autor_nombre'] ?? 'Usuario') ?></div>
+                            <div class="comment-user">
+                                <a href="perfil.php?id=<?= $comentario['usuario_id'] ?? 0 ?>" class="author-link" style="color: #3b82f6;">
+                                    <?php if (!empty($comentario['foto_perfil'])): ?>
+                                        <img src="../../assets/<?= htmlspecialchars($comentario['foto_perfil']) ?>" class="avatar-mini" alt="Foto" style="width: 24px; height: 24px;">
+                                    <?php else: ?>
+                                        <i class="fas fa-user-circle"></i>
+                                    <?php endif; ?>
+                                    <?= htmlspecialchars($comentario['autor_nombre'] ?? 'Usuario') ?>
+                                </a>
+                            </div>
                             <p style="margin: 0;"><?= nl2br(htmlspecialchars($comentario['contenido'])) ?></p>
                         </div>
                     <?php 
@@ -421,6 +469,8 @@ if (!$pub) {
 
     <script>
         const usuarioLogueado = <?= json_encode($usuarioLogueado) ?>;
+        // Obtenemos el ID del usuario en JS para que los comentarios en tiempo real tengan enlace correcto
+        const miUsuarioId = <?= $_SESSION['usuario_id'] ?? 0 ?>;
         
         // El script de comentarios adaptado específicamente para esta vista
         document.querySelectorAll('.comment-form').forEach(form => {
@@ -461,8 +511,14 @@ if (!$pub) {
                         const nuevoComentario = document.createElement('div');
                         nuevoComentario.className = 'comment-item';
                         nuevoComentario.style.animation = 'fadeIn 0.4s ease';
+                        
+                        // Enlace con foto (por defecto ícono ya que es AJAX, al recargar agarra su foto)
                         nuevoComentario.innerHTML = `
-                            <div class="comment-user"><i class="fas fa-user-circle"></i> ${data.autor}</div>
+                            <div class="comment-user">
+                                <a href="perfil.php?id=${miUsuarioId}" class="author-link" style="color: #3b82f6;">
+                                    <i class="fas fa-user-circle"></i> ${data.autor}
+                                </a>
+                            </div>
                             <p style="margin: 0;">${data.contenido}</p>
                         `;
                         listaComentarios.appendChild(nuevoComentario);

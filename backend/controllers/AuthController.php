@@ -107,12 +107,12 @@ class AuthController {
             // Configuración del servidor SMTP de IONOS
             $mail->isSMTP();
             // CAMBIA ESTO: Confirma tu host en el panel de IONOS, usualmente es smtp.ionos.mx o smtp.ionos.com
-            $mail->Host       = 'jejejeje'; 
+            $mail->Host       = 'smtp.ionos.mx'; 
             $mail->SMTPAuth   = true;
             // CAMBIA ESTO: Tu correo creado en IONOS
             $mail->Username   = 'no-reply@red-novable.com'; 
             // La contraseña del correo de ionos
-            $mail->Password   = 'ContraseñaDeCorreo'; 
+            $mail->Password   = 'a65981bn32h9ri0sdsdadadda'; 
             $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS; // TLS
             $mail->Port       = 587; // Puerto para TLS
             $mail->CharSet    = 'UTF-8';

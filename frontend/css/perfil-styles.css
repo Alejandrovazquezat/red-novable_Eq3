@@ -556,3 +556,37 @@ body.dark-mode .ql-snow .ql-picker { color: #cbd5e1; }
     .profile-modal-right { width: 100%; }
     .uiverse-photo-card { width: 100%; max-width: 240px; height: 300px; }
 }
+/* 🔥 NUEVO BOTÓN GRIS CRISTAL PARA SOLICITAR ROL 🔥 */
+.btn-glass-gray {
+    background: rgba(177, 177, 177, 0.462) !important;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(177, 177, 177, 0.8) !important;
+    color: var(--texto-titulos) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+    position: relative; font-size: 0.9rem; font-weight: 700;
+    text-transform: uppercase; text-decoration: none; padding: 0.8em 1.4em;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    cursor: pointer; border-radius: 6em; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    font-family: 'Inter', sans-serif;
+}
+
+.btn-glass-gray:hover {
+    background: rgba(172, 172, 172, 0.8) !important;
+    border-color: #94a3b8 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1) !important;
+}
+
+body.dark-mode .btn-glass-gray {
+    background: rgba(22, 27, 34, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #e2e8f0 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+body.dark-mode .btn-glass-gray:hover {
+    background: rgba(30, 41, 59, 0.8) !important;
+    border-color: #60a5fa !important;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.5) !important;
+}
